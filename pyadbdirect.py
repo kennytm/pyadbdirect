@@ -24,6 +24,7 @@ import errno
 import itertools
 import queue
 import select
+import shlex
 import socket
 import struct
 import threading
@@ -292,6 +293,7 @@ class ADBConnection(object):
             while self._services:
                 self._service_closed_condition.wait()
 
+#{{{ Services ------------------------------------------------------------------
 
 def simple_service(callback):
     '''A service which simply reads and reply all data using a function.
@@ -333,8 +335,69 @@ def simple_text_service(callback, encoding='utf-8'):
             reply = reply.encode(encoding)
         received = yield reply
 
+#}}}
+
+#{{{ Service names -------------------------------------------------------------
+
+def logcat_name(filters=None, format=None, clear=False, binary=False):
+    '''The name of a LogCat service.
+
+    The *filters* should be an iterable of pairs of the form
+    ``[('tag1', 'v'), ('tag2', 'e'), ...]``. The first element is the log
+    component tag, and the second element is the priority. The tag can be
+    ``'*'``.
+
+    +----------+-----------------------------+
+    | Priority | Definition                  |
+    +==========+=============================+
+    | 'v'      | Verbose                     |
+    +----------+-----------------------------+
+    | 'd'      | Debug                       |
+    +----------+-----------------------------+
+    | 'i'      | Info                        |
+    +----------+-----------------------------+
+    | 'w'      | Warn                        |
+    +----------+-----------------------------+
+    | 'e'      | Error                       |
+    +----------+-----------------------------+
+    | 'f'      | Fatal                       |
+    +----------+-----------------------------+
+    | 's'      | Silent (supress all output) |
+    +----------+-----------------------------+
+
+    The *format* can be one of:
+
+    * brief
+    * process
+    * tag
+    * thread
+    * raw
+    * time
+    * threadtime
+    * long
+
+    :param filters: The tag filters.
+    :param format: The output format.
+    :param clear: If true, clear the logcat history and exit immediately.
+    :param binary: If true, output the data in binary format.
+    '''
+
+    args = []
+    if clear:
+        args.append('-c')
+    if binary:
+        args.append('-B')
+    if format:
+        args.extend(['-v', format])
+    if filters:
+        args.append(',')
+        for tag, priority in filters:
+            args.append(shlex.quote(tag) + ':' + priority)
+
+    return 'shell:export ANDROID_LOG_TAGS="";exec logcat ' + ' '.join(args)
 
 
+#}}}
 
 if __name__ == '__main__':
     with ADBConnection('192.168.56.101') as conn:
